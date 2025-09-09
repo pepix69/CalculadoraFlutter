@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:math_expressions/math_expressions.dart';
 
 void main() {
-  runApp(CalculadoraApp());
+  runApp(const CalculadoraApp());
 }
 
 class CalculadoraApp extends StatelessWidget {
@@ -11,11 +12,11 @@ class CalculadoraApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Calculadora Flutter',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+      theme: ThemeData.dark().copyWith(
+        primaryColor: Colors.black,
+        scaffoldBackgroundColor: Colors.black,
       ),
-      home: PantallaCalculadora(),
+      home: const PantallaCalculadora(),
       debugShowCheckedModeBanner: false,
     );
   }
@@ -25,130 +26,76 @@ class PantallaCalculadora extends StatefulWidget {
   const PantallaCalculadora({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
-  _EstadoPantallaCalculadora createState() => _EstadoPantallaCalculadora();
+  State<PantallaCalculadora> createState() => _EstadoPantallaCalculadora();
 }
 
 class _EstadoPantallaCalculadora extends State<PantallaCalculadora> {
-  String valorPantalla = '0';
-  String valorPrevio = '';
-  String operacion = '';
-  bool esperandoNuevoValor = false;
+  String expresion = ''; // toda la operación
+  String resultado = '0'; // resultado actual
+  List<String> historial = []; // lista de operaciones previas
 
   void botonPresionado(String valor) {
     setState(() {
       if (valor == 'C') {
-        // Limpiar
-        valorPantalla = '0';
-        valorPrevio = '';
-        operacion = '';
-        esperandoNuevoValor = false;
-      } else if (valor == '±') {
-        // Cambiar signo
-        if (valorPantalla != '0') {
-          valorPantalla = valorPantalla.startsWith('-') 
-              ? valorPantalla.substring(1) 
-              : '-$valorPantalla';
-        }
-      } else if (valor == '%') {
-        // Porcentaje
-        double actual = double.parse(valorPantalla);
-        valorPantalla = (actual / 100).toString();
-        if (valorPantalla.endsWith('.0')) {
-          valorPantalla = valorPantalla.substring(0, valorPantalla.length - 2);
-        }
-      } else if (['+', '-', '×', '÷'].contains(valor)) {
-        // Operadores
-        if (operacion.isNotEmpty && !esperandoNuevoValor) {
-          calcular();
-        }
-        valorPrevio = valorPantalla;
-        operacion = valor;
-        esperandoNuevoValor = true;
+        expresion = '';
+        resultado = '0';
+        historial.clear();
       } else if (valor == '=') {
-        // Igual
         calcular();
-        operacion = '';
-        valorPrevio = '';
-        esperandoNuevoValor = true;
-      } else if (valor == '.') {
-        // Punto decimal
-        if (esperandoNuevoValor) {
-          valorPantalla = '0.';
-          esperandoNuevoValor = false;
-        } else if (!valorPantalla.contains('.')) {
-          valorPantalla += '.';
-        }
       } else {
-        // Números
-        if (esperandoNuevoValor) {
-          valorPantalla = valor;
-          esperandoNuevoValor = false;
-        } else {
-          valorPantalla = valorPantalla == '0' ? valor : '$valorPantalla$valor';
-        }
+        // agregar operadores y números a la expresión
+        expresion += valor;
       }
     });
   }
 
   void calcular() {
-    if (valorPrevio.isEmpty || operacion.isEmpty) return;
+  try {
+    // Reemplazar símbolos para que los entienda math_expressions
+    String expresionProcesada =
+        expresion.replaceAll('×', '*').replaceAll('÷', '/');
 
-    double previo = double.parse(valorPrevio);
-    double actual = double.parse(valorPantalla);
-    double resultado = 0;
+    ShuntingYardParser p = ShuntingYardParser();
+    Expression exp = p.parse(expresionProcesada);
+    ContextModel cm = ContextModel();
+    double eval = exp.evaluate(EvaluationType.REAL, cm);
 
-    switch (operacion) {
-      case '+':
-        resultado = previo + actual;
-        break;
-      case '-':
-        resultado = previo - actual;
-        break;
-      case '×':
-        resultado = previo * actual;
-        break;
-      case '÷':
-        if (actual != 0) {
-          resultado = previo / actual;
-        } else {
-          valorPantalla = 'Error';
-          return;
-        }
-        break;
+    resultado = eval.toString();
+    if (resultado.endsWith('.0')) {
+      resultado = resultado.substring(0, resultado.length - 2);
     }
 
-    valorPantalla = resultado.toString();
-    
-    // Quitar .0 si es número entero
-    if (valorPantalla.endsWith('.0')) {
-      valorPantalla = valorPantalla.substring(0, valorPantalla.length - 2);
+    // Guardar en historial (solo las últimas 10 operaciones)
+    historial.insert(0, "$expresion = $resultado");
+    if (historial.length > 10) {
+      historial = historial.sublist(0, 10);
     }
-    
-    esperandoNuevoValor = true;
+
+    expresion = '';
+  } catch (e) {
+    resultado = "Error";
   }
+}
+
+
 
   Widget construirBoton(String valor, {Color? color, Color? colorTexto}) {
     return Expanded(
       child: Container(
-        margin: EdgeInsets.all(4),
+        margin: const EdgeInsets.all(4),
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: color ?? Colors.grey[300],
-            foregroundColor: colorTexto ?? Colors.black,
-            padding: EdgeInsets.all(20),
+            backgroundColor: color ?? Colors.grey[800],
+            foregroundColor: colorTexto ?? Colors.white,
+            padding: const EdgeInsets.all(20),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(40),
             ),
-            elevation: 2,
           ),
           onPressed: () => botonPresionado(valor),
           child: Text(
             valor,
-            style: TextStyle(
-              fontSize: 24,
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w500),
           ),
         ),
       ),
@@ -158,115 +105,130 @@ class _EstadoPantallaCalculadora extends State<PantallaCalculadora> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(
-          'Calculadora',
-          style: TextStyle(color: Colors.white),
-        ),
+        title: const Text('Calculadora'),
         backgroundColor: Colors.black,
-        elevation: 0,
       ),
       body: Column(
         children: [
-          // Pantalla
+          // Historial
           Expanded(
-            child: Container(
-              alignment: Alignment.bottomRight,
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-              child: Text(
-                valorPantalla,
-                style: TextStyle(
-                  fontSize: 48,
-                  fontWeight: FontWeight.w300,
-                  color: Colors.white,
-                ),
-                textAlign: TextAlign.right,
+            child: ListView.builder(
+              reverse: true,
+              itemCount: historial.length,
+              itemBuilder: (context, index) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 2.0, horizontal: 16.0),
+                  child: Text(
+                    historial[index],
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                );
+              },
+            ),
+          ),
+
+          // Expresión actual
+          Container(
+            alignment: Alignment.bottomRight,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: Text(
+              expresion,
+              style: TextStyle(
+                fontSize: 28,
+                color: Colors.white.withValues(alpha: 0.6),
               ),
             ),
           ),
-          
+
+          // Resultado actual
+          Container(
+            alignment: Alignment.bottomRight,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: Text(
+              resultado,
+              style: const TextStyle(
+                fontSize: 48,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+
           // Botones
           Container(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.all(8),
             child: Column(
               children: [
-                // Primera fila: C, ±, %, ÷
                 Row(
                   children: [
-                    construirBoton('C', color: Colors.grey[400], colorTexto: Colors.black),
-                    construirBoton('±', color: Colors.grey[400], colorTexto: Colors.black),
-                    construirBoton('%', color: Colors.grey[400], colorTexto: Colors.black),
-                    construirBoton('÷', color: Colors.orange, colorTexto: Colors.white),
+                    construirBoton('C', color: Colors.red, colorTexto: Colors.white),
+                    construirBoton('(', color: Colors.grey[700]),
+                    construirBoton(')', color: Colors.grey[700]),
+                    construirBoton('÷', color: Colors.orange),
                   ],
                 ),
-                
-                // Segunda fila: 7, 8, 9, ×
                 Row(
                   children: [
-                    construirBoton('7', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('8', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('9', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('×', color: Colors.orange, colorTexto: Colors.white),
+                    construirBoton('7'),
+                    construirBoton('8'),
+                    construirBoton('9'),
+                    construirBoton('×', color: Colors.orange),
                   ],
                 ),
-                
-                // Tercera fila: 4, 5, 6, -
                 Row(
                   children: [
-                    construirBoton('4', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('5', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('6', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('-', color: Colors.orange, colorTexto: Colors.white),
+                    construirBoton('4'),
+                    construirBoton('5'),
+                    construirBoton('6'),
+                    construirBoton('-', color: Colors.orange),
                   ],
                 ),
-                
-                // Cuarta fila: 1, 2, 3, +
                 Row(
                   children: [
-                    construirBoton('1', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('2', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('3', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('+', color: Colors.orange, colorTexto: Colors.white),
+                    construirBoton('1'),
+                    construirBoton('2'),
+                    construirBoton('3'),
+                    construirBoton('+', color: Colors.orange),
                   ],
                 ),
-                
-                // Quinta fila: 0, ., =
                 Row(
                   children: [
                     Expanded(
                       flex: 2,
                       child: Container(
-                        margin: EdgeInsets.all(4),
+                        margin: const EdgeInsets.all(4),
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.grey[700],
+                            backgroundColor: Colors.grey[800],
                             foregroundColor: Colors.white,
-                            padding: EdgeInsets.all(20),
+                            padding: const EdgeInsets.all(20),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(40),
                             ),
-                            elevation: 2,
                           ),
                           onPressed: () => botonPresionado('0'),
-                          child: Align(
+                          child: const Align(
                             alignment: Alignment.centerLeft,
                             child: Padding(
                               padding: EdgeInsets.only(left: 20),
                               child: Text(
                                 '0',
                                 style: TextStyle(
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                                    fontSize: 24, fontWeight: FontWeight.w500),
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                    construirBoton('.', color: Colors.grey[700], colorTexto: Colors.white),
-                    construirBoton('=', color: Colors.orange, colorTexto: Colors.white),
+                    construirBoton('.'),
+                    construirBoton('=', color: Colors.orange),
                   ],
                 ),
               ],
